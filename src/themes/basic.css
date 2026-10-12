@@ -1,0 +1,119 @@
+/* trandex style: monochrome */
+
+/* Colors */
+@define-color trandex_bg rgba(18, 18, 18, 0.94);
+@define-color trandex_panel #1e1e1e;
+@define-color trandex_border #444444;
+@define-color trandex_text #eeeeee;
+@define-color trandex_muted #777777;
+
+/* Window and root: fully transparent so only the cards show. */
+.app-screen,
+.app-window {
+  background-color: transparent;
+}
+
+/* Shared card look for the search bar and the results list. */
+.app-search-row,
+.app-results-scroll {
+  background-color: @trandex_bg;
+  border: 1px solid @trandex_border;
+  border-radius: 12px;
+}
+
+.app-search-row {
+  padding: 4px;
+}
+
+.app-results-scroll {
+  padding: 6px;
+  min-height: 420px;
+}
+
+/* Search entry sits inside the search card, no border of its own. */
+.app-search {
+  background-color: transparent;
+  color: @trandex_text;
+  border: none;
+  box-shadow: none;
+  padding: 8px 10px;
+  caret-color: #ffffff;
+}
+
+.app-search placeholder {
+  color: @trandex_muted;
+}
+
+.app-spinner {
+  margin: 0 8px;
+}
+
+/* Menu button */
+menubutton > button,
+.app-menu > button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #cccccc;
+}
+
+menubutton > button:hover,
+.app-menu > button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Result rows */
+.app-row {
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: #cccccc;
+}
+
+.app-row:selected {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.app-content {
+  padding: 0;
+}
+
+.app-icon {
+  background-color: transparent;
+}
+
+.app-title {
+  font-weight: bold;
+  color: @trandex_text;
+}
+
+.app-sub {
+  color: @trandex_muted;
+  font-size: 0.85em;
+}
+
+/* Shortcut pill ("Alt + 1" ... "Alt + 0") */
+.app-pill {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #888888;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 0.72em;
+}
+
+
+/* Preview: solid, same base color as the card, no transparency */
+.app-preview {
+  background-color: #121212;
+  border: 1px solid @trandex_border;
+  border-radius: 6px;
+  padding: 6px;
+  min-height: 420px;
+}
+
+.app-preview-label {
+  font-family: monospace;
+  color: @trandex_text;
+}

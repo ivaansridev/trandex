@@ -1,0 +1,30 @@
+.trandex-window {
+  background: transparent;
+}
+
+.trandex-container {
+  min-width: 720px;
+  min-height: 420px;
+  background: #121212;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.trandex-search {
+  background: #1e1e1e;
+  color: #eeeeee;
+  border-radius: 8px;
+  border: none;
+  min-height: 36px;
+}
+
+.trandex-results-scroll,
+.trandex-preview {
+  min-height: 420px;
+}
+
+.trandex-preview-label,
+.trandex-result-name,
+.trandex-result-subtitle {
+  color: #eeeeee;
+}

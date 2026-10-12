@@ -1,0 +1,57 @@
+# Set your own path (Absolute without '~')
+position: center
+placeholder: "Start typing..."
+preview: left
+items:
+  - AppList
+  - Math
+  - Index
+
+ignore:
+  # Build output and dependencies
+  - node_modules
+  - target
+  - build
+  - dist
+  - .next
+  - __pycache__
+  - .venv
+  - venv
+  - .gradle
+  - .mvn
+  # Version control
+  - .git
+  - .hg
+  - .svn
+  # Caches and app data
+  - .cache
+  - .cargo
+  - .rustup
+  - .npm
+  - .yarn
+  - .pnpm-store
+  - .gem
+  - .m2
+  - .ccache
+  - .local
+  - .config
+  - .mozilla
+  - .thunderbird
+  - .var
+  - Cache
+  - Caches
+  # Browser and chat profiles
+  - .zen
+  - .helium
+  - .google-chrome
+  - .chromium
+  - .vscode
+  - .vscode-oss
+  - .android
+  - .sklauncher
+  - .minecraft
+  - .wine
+  - .steam
+  - .icons
+  - .themes
+  - .oh-my-zsh

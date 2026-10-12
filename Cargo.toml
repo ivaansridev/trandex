@@ -1,0 +1,13 @@
+[package]
+name = "trandex"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-channel = "2"
+clap = { version = "4", features = ["derive"] }
+glib21 = { package = "glib", version = "0.21.5" }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_4"] }
+gtk4-layer-shell = { version = "0.8", features = ["v1_3"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
