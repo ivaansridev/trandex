@@ -1130,6 +1130,18 @@ fn install_css(styles: Option<&Path>, config_dir: Option<&Path>) {
                 gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
+        // GTK's built-in theme paints an accent-colored focus outline around
+        // the focused entry. Load this above every other provider so it is
+        // always suppressed, regardless of the active theme or user CSS.
+        let focus_reset = gtk::CssProvider::new();
+        focus_reset.load_from_data(
+            "entry:focus, entry:focus-within { outline: none; box-shadow: none; }",
+        );
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &focus_reset,
+            gtk::STYLE_PROVIDER_PRIORITY_USER + 1,
+        );
     }
 }
 
