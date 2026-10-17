@@ -584,6 +584,8 @@ fn setup_full(
         menu_button.add_css_class("app-menu");
         search_row.append(&menu_button);
         tick(t0, "container/search/menu_button construction");
+        let reload_loop = main_loop.clone();
+        let reload_socket = socket_path.clone();
         install_socket(
             socket_path,
             window.clone(),
@@ -778,6 +780,18 @@ fn setup_full(
             });
         }
         let menu = gio::Menu::new();
+        let reload_action = gio::SimpleAction::new("reload", None);
+        {
+            let reload_config = config_path.clone();
+            let reload_socket = reload_socket.clone();
+            let reload_loop = reload_loop.clone();
+            reload_action.connect_activate(move |_, _| {
+                match restart_daemon(&reload_config, &reload_socket) {
+                    Ok(()) => reload_loop.quit(),
+                    Err(error) => eprintln!("trandex: could not reload: {error}"),
+                }
+            });
+        }
         let settings_action = gio::SimpleAction::new("settings", None);
         {
             let settings_path = config_path.clone();
@@ -792,8 +806,10 @@ fn setup_full(
         }
         let action_group = gio::SimpleActionGroup::new();
         action_group.add_action(&about_action);
+        action_group.add_action(&reload_action);
         action_group.add_action(&settings_action);
         window.insert_action_group("win", Some(&action_group));
+        menu.append(Some("Reload"), Some("win.reload"));
         menu.append(Some("Settings"), Some("win.settings"));
         menu.append(Some("About"), Some("win.about"));
         menu_button.set_menu_model(Some(&menu));
@@ -801,10 +817,10 @@ fn setup_full(
         // --- Debounce keystrokes --------------------------------------------
         {
             let state = Rc::clone(&state);
-            let pool = Rc::clone(&pool);
+            let _pool = Rc::clone(&pool);
             let view = view.clone();
             let generation = Rc::clone(&generation);
-            let preview_cache = Rc::clone(&preview_cache);
+            let _preview_cache = Rc::clone(&preview_cache);
             let file_tx = file_tx.clone();
             let spinner = spinner.clone();
             search.connect_changed(move |entry| {
@@ -830,15 +846,14 @@ fn setup_full(
                     query: text.clone(),
                     index_revision,
                 });
-                if !text.trim().is_empty() {
-                    if state.borrow().providers.contains(&Provider::Index) && !text.trim().is_empty() {
+                if !text.trim().is_empty()
+                    && state.borrow().providers.contains(&Provider::Index) && !text.trim().is_empty() {
                         let _ = file_tx.send_blocking(FileQueryRequest {
                             generation: current,
                             query: text,
                             sent_at: Instant::now(),
                         });
                     }
-                }
             });
         }
         {
@@ -942,6 +957,25 @@ fn setup_full(
         window.add_controller(key_controller);
         tick(t0, "window.add_controller");
     eprintln!("Setup complete in {}ms", origin.elapsed().as_millis());
+}
+
+/// Spawn a fresh daemon process and take the control socket down so the
+/// replacement can bind it. The caller quits the current main loop afterwards.
+fn restart_daemon(config_path: &Path, socket_path: &Path) -> std::io::Result<()> {
+    let exe = std::env::current_exe()?;
+    // Unlink before spawning: the current listener stays alive until the main
+    // loop quits, and leaving the file behind would make the child believe a
+    // daemon is already running.
+    let _ = std::fs::remove_file(socket_path);
+    Command::new(exe)
+        .arg("--daemon")
+        .arg("--config")
+        .arg(config_path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    Ok(())
 }
 
 fn install_socket(
@@ -1233,7 +1267,7 @@ fn start_file_query_worker(
                         let _ = child.kill();
                         break;
                     }
-                    if name_matches.len() >= 1 {
+                    if !name_matches.is_empty() {
                         let batch = std::mem::take(&mut name_matches);
                         let _ = reply_tx.send_blocking(FileReply {
                             generation: request.generation,
@@ -1718,7 +1752,7 @@ fn update_preview(
         }
     } else if !shown.is_empty() {
         let state_borrow = state.borrow();
-        if let Some(item_ref) = shown.get(0) {
+        if let Some(item_ref) = shown.first() {
             item_opt = resolve(&state_borrow, *item_ref).map(|item| item.source.clone());
         }
     }
@@ -1811,8 +1845,8 @@ fn load_text_preview(
         let _ = sender.send_blocking((path_clone, PreviewContent::Text(content)));
     });
     glib::spawn_future_local(async move {
-        if let Ok((path, content)) = receiver.recv().await {
-            if generation == current_generation.get() {
+        if let Ok((path, content)) = receiver.recv().await
+            && generation == current_generation.get() {
                 if let PreviewContent::Text(text) = &content {
                     label.set_label(text);
                     picture.set_visible(false);
@@ -1820,7 +1854,6 @@ fn load_text_preview(
                 }
                 preview_cache.borrow_mut().insert(path, content);
             }
-        }
     });
 }
 
@@ -1866,8 +1899,8 @@ fn load_dir_preview(
         let _ = sender.send_blocking((path_clone, PreviewContent::Dir(text)));
     });
     glib::spawn_future_local(async move {
-        if let Ok((path, content)) = receiver.recv().await {
-            if generation == current_generation.get() {
+        if let Ok((path, content)) = receiver.recv().await
+            && generation == current_generation.get() {
                 if let PreviewContent::Dir(text) = &content {
                     label.set_label(text);
                     picture.set_visible(false);
@@ -1875,7 +1908,6 @@ fn load_dir_preview(
                 }
                 preview_cache.borrow_mut().insert(path, content);
             }
-        }
     });
 }
 
@@ -1974,11 +2006,10 @@ fn launch_shown(
     let source = {
         let state = state.borrow();
         if state.shown.get(shown_index) == Some(&ItemRef::Math) {
-            if let Some(value) = &state.math_answer {
-                if let Some(display) = gdk::Display::default() {
+            if let Some(value) = &state.math_answer
+                && let Some(display) = gdk::Display::default() {
                     display.clipboard().set_text(value);
                 }
-            }
             window.hide();
             return;
         }
