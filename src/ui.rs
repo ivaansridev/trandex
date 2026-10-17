@@ -24,6 +24,15 @@ use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use crate::config::{Config, PreviewPosition, Provider, WindowPosition};
 use crate::indexer::{self, DesktopEntry, Item, Source};
 
+/// The launcher logo, embedded at compile time and rendered for the About dialog.
+fn about_logo() -> Option<gdk::Texture> {
+    let loader = gtk::gdk_pixbuf::PixbufLoader::with_type("svg").ok()?;
+    loader.set_size(128, 128);
+    loader.write(include_bytes!("assets/favicon.svg")).ok()?;
+    loader.close().ok()?;
+    Some(gdk::Texture::for_pixbuf(&loader.pixbuf()?))
+}
+
 fn tick(t0: std::time::Instant, label: &str) {
     eprintln!("[{:>5} ms] {}", t0.elapsed().as_millis(), label);
 }
@@ -775,6 +784,7 @@ fn setup_full(
                     .version(env!("CARGO_PKG_VERSION"))
                     .comments("A fast, floating file launcher for Wayland.")
                     .build();
+                about.set_logo(about_logo().as_ref());
                 about.set_transient_for(Some(&about_window));
                 about.present();
             });
