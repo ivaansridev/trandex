@@ -401,6 +401,170 @@ struct ResultsView {
     preview_label: gtk::Label,
     /// Preview picture for images
     preview_picture: gtk::Picture,
+    /// Rich preview shown for `.desktop` applications.
+    app_preview: AppPreview,
+}
+
+/// The widgets used by the application preview card.
+#[derive(Clone)]
+struct AppPreview {
+    container: gtk::Box,
+    icon: gtk::Image,
+    name: gtk::Label,
+    id: gtk::Label,
+    runs: gtk::Label,
+    hovered: Rc<Cell<bool>>,
+    gloss: Option<gtk::DrawingArea>,
+}
+
+impl AppPreview {
+    fn new(glossy_effect: bool) -> Self {
+        let container = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        container.add_css_class("app-preview-app");
+        container.set_valign(gtk::Align::Center);
+        container.set_halign(gtk::Align::Fill);
+        container.set_vexpand(true);
+
+        let icon_frame = gtk::Overlay::new();
+        icon_frame.add_css_class("app-preview-app-icon-frame");
+        icon_frame.set_halign(gtk::Align::Center);
+        icon_frame.set_valign(gtk::Align::Center);
+        icon_frame.set_size_request(116, 116);
+
+        let icon = gtk::Image::new();
+        icon.set_pixel_size(92);
+        icon.add_css_class("app-preview-app-icon");
+        icon.set_can_target(false);
+        icon_frame.set_child(Some(&icon));
+
+        let hovered = Rc::new(Cell::new(false));
+        let gloss = if glossy_effect {
+            // Translucent highlight drawn on top of the icon, following the pointer.
+            let gloss = gtk::DrawingArea::new();
+            gloss.set_can_target(true);
+            gloss.set_hexpand(true);
+            gloss.set_vexpand(true);
+            let pointer = Rc::new(Cell::new((58.0, 58.0)));
+            {
+                let hovered = Rc::clone(&hovered);
+                let pointer = Rc::clone(&pointer);
+                gloss.set_draw_func(move |_, cr, width, height| {
+                    if !hovered.get() {
+                        return;
+                    }
+                    let (x, y) = pointer.get();
+                    let radius = (width.max(height) as f64 * 0.78).max(1.0);
+                    let gradient = gtk::cairo::RadialGradient::new(x, y, 0.0, x, y, radius);
+                    gradient.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.42);
+                    gradient.add_color_stop_rgba(0.42, 1.0, 1.0, 1.0, 0.14);
+                    gradient.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.0);
+                    rounded_rect(cr, 0.0, 0.0, width as f64, height as f64, 20.0);
+                    cr.clip();
+                    let _ = cr.set_source(&gradient);
+                    let _ = cr.paint();
+                });
+            }
+            {
+                let hovered_enter = Rc::clone(&hovered);
+                let pointer_enter = Rc::clone(&pointer);
+                let gloss_enter = gloss.clone();
+                let motion = gtk::EventControllerMotion::new();
+                motion.connect_enter(move |_, x, y| {
+                    hovered_enter.set(true);
+                    pointer_enter.set((x, y));
+                    gloss_enter.queue_draw();
+                });
+                let hovered_leave = Rc::clone(&hovered);
+                let gloss_leave = gloss.clone();
+                motion.connect_leave(move |_| {
+                    hovered_leave.set(false);
+                    gloss_leave.queue_draw();
+                });
+                let hovered_motion = Rc::clone(&hovered);
+                let pointer_motion = Rc::clone(&pointer);
+                let gloss_motion = gloss.clone();
+                motion.connect_motion(move |_, x, y| {
+                    if !hovered_motion.get() {
+                        return;
+                    }
+                    pointer_motion.set((x, y));
+                    gloss_motion.queue_draw();
+                });
+                gloss.add_controller(motion);
+            }
+            icon_frame.add_overlay(&gloss);
+            Some(gloss)
+        } else {
+            None
+        };
+        container.append(&icon_frame);
+
+        let name = gtk::Label::builder()
+            .xalign(0.5)
+            .justify(gtk::Justification::Center)
+            .ellipsize(pango::EllipsizeMode::Middle)
+            .max_width_chars(30)
+            .build();
+        name.add_css_class("app-preview-app-name");
+        container.append(&name);
+
+        let id = gtk::Label::builder()
+            .xalign(0.5)
+            .justify(gtk::Justification::Center)
+            .ellipsize(pango::EllipsizeMode::Middle)
+            .max_width_chars(38)
+            .build();
+        id.add_css_class("app-preview-app-id");
+        container.append(&id);
+
+        let runs = gtk::Label::builder()
+            .xalign(0.5)
+            .justify(gtk::Justification::Center)
+            .wrap(true)
+            .wrap_mode(pango::WrapMode::WordChar)
+            .max_width_chars(40)
+            .build();
+        runs.add_css_class("app-preview-app-runs");
+        container.append(&runs);
+
+        Self {
+            container,
+            icon,
+            name,
+            id,
+            runs,
+            hovered,
+            gloss,
+        }
+    }
+
+    fn bind(&self, entry: &DesktopEntry) {
+        self.icon.set_from_gicon(&app_icon(entry));
+        self.name.set_label(&entry.name);
+        self.id.set_label(&entry.id);
+        self.runs.set_label(&format!("Runs: {}", entry.exec));
+        self.container.set_visible(true);
+    }
+
+    fn hide(&self) {
+        self.hovered.set(false);
+        if let Some(gloss) = &self.gloss {
+            gloss.queue_draw();
+        }
+        self.container.set_visible(false);
+    }
+}
+
+/// Trace a rounded rectangle used to clip the glossy icon highlight.
+fn rounded_rect(cr: &gtk::cairo::Context, x: f64, y: f64, width: f64, height: f64, radius: f64) {
+    use std::f64::consts::{FRAC_PI_2, PI};
+    let radius = radius.min(width / 2.0).min(height / 2.0);
+    cr.new_sub_path();
+    cr.arc(x + width - radius, y + radius, radius, -FRAC_PI_2, 0.0);
+    cr.arc(x + width - radius, y + height - radius, radius, 0.0, FRAC_PI_2);
+    cr.arc(x + radius, y + height - radius, radius, FRAC_PI_2, PI);
+    cr.arc(x + radius, y + radius, radius, PI, 3.0 * FRAC_PI_2);
+    cr.close_path();
 }
 
 /// A reusable result row. Rows are created once and then re-bound to new
@@ -647,9 +811,13 @@ fn setup_full(
         preview_scroll.add_css_class("app-preview-scroll");
         preview_scroll.set_vexpand(true);
 
+        let app_preview = AppPreview::new(config.app_list_glossy_effect());
+        app_preview.hide();
+
         let preview_panel = gtk::Box::new(gtk::Orientation::Vertical, 0);
         preview_panel.add_css_class("app-preview");
         preview_panel.set_vexpand(true);
+        preview_panel.append(&app_preview.container);
         preview_panel.append(&preview_scroll);
         let mut view = ResultsView {
             list: results,
@@ -659,6 +827,7 @@ fn setup_full(
             preview_scroll: preview_scroll.clone(),
             preview_label: preview_label.clone(),
             preview_picture: preview_picture.clone(),
+            app_preview,
         };
 
         let results_area = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -1812,18 +1981,22 @@ fn update_preview(
             view.preview_picture.set_file(None::<&gio::File>);
             view.preview_label.set_visible(false);
             view.preview_picture.set_visible(false);
+            view.app_preview.hide();
+            view.preview_scroll.set_visible(false);
             return;
         }
     };
 
     match item {
         Source::App(entry) => {
-            let content = format!("Name: {}\nID: {}\nExec: {}", entry.name, entry.id, entry.exec);
+            view.preview_label.set_visible(false);
             view.preview_picture.set_visible(false);
-            view.preview_label.set_visible(true);
-            view.preview_label.set_label(&content);
+            view.preview_scroll.set_visible(false);
+            view.app_preview.bind(&entry);
         }
         Source::File(path) => {
+            view.app_preview.hide();
+            view.preview_scroll.set_visible(true);
             let path_buf = path.clone();
             if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                 let ext_lower = ext.to_lowercase();
@@ -1858,6 +2031,8 @@ fn update_preview(
             );
         }
         Source::Command(path) => {
+            view.app_preview.hide();
+            view.preview_scroll.set_visible(true);
             view.preview_picture.set_visible(false);
             view.preview_label.set_visible(true);
             view.preview_label.set_label(&format!("Command: {}", path.display()));

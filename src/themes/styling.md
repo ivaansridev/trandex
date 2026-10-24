@@ -17,6 +17,12 @@ configured stylesheet.
 | `.app-sub` | Row path | Secondary path or subtitle text. |
 | `.app-pill` | Shortcut badge | `Alt + N` shortcut badge. |
 | `.app-preview` | Preview panel | Preview panel shown beside results. |
+| `.app-preview-app` | App preview | Centered `.desktop` app preview card. |
+| `.app-preview-app-icon-frame` | App preview icon frame | Glossy rounded tile behind the app icon. |
+| `.app-preview-app-icon` | App preview icon | The app's icon inside the tile. |
+| `.app-preview-app-name` | App preview name | Application display name. |
+| `.app-preview-app-id` | App preview ID | Desktop ID (`.desktop` file name). |
+| `.app-preview-app-runs` | App preview command | `Runs: …` command line. |
 
 Structural and advanced elements use the `app-advanced-*` prefix:
 

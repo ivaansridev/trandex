@@ -117,3 +117,38 @@ menubutton > button:hover,
   font-family: monospace;
   color: @trandex_text;
 }
+
+/* Rich preview for .desktop applications. */
+.app-preview-app {
+  padding: 18px;
+}
+
+.app-preview-app-icon-frame {
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.app-preview-app-icon {
+  background-color: transparent;
+}
+
+.app-preview-app-name {
+  margin-top: 6px;
+  font-size: 1.18em;
+  font-weight: bold;
+  color: @trandex_text;
+}
+
+.app-preview-app-id {
+  font-size: 0.86em;
+  color: @trandex_muted;
+}
+
+.app-preview-app-runs {
+  margin-top: 2px;
+  font-size: 0.78em;
+  color: #5f5f5f;
+}

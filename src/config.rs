@@ -32,12 +32,33 @@ pub struct Config {
     /// Item providers in display and ranking order.
     #[serde(default)]
     pub items: Vec<String>,
+    /// Per-provider appearance options.
+    #[serde(default, rename = "item-settings", alias = "itemsettings")]
+    pub item_settings: ItemSettings,
     /// Directory names excluded from indexing.
     #[serde(default)]
     pub ignore: Vec<String>,
     /// Whether hidden files are indexed. Defaults to `true`.
     #[serde(default)]
     pub hidden: Option<bool>,
+}
+
+/// Appearance tweaks for the item providers.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ItemSettings {
+    /// Settings for desktop applications.
+    #[serde(default, alias = "applist")]
+    pub app_list: AppListSettings,
+}
+
+/// Settings for the `AppList` provider.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct AppListSettings {
+    /// Draw the mouse-following gloss over the app preview icon. Defaults to `true`.
+    #[serde(default)]
+    pub glossy_effect: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,6 +216,11 @@ impl Config {
     /// Whether hidden files should be indexed.
     pub fn hidden(&self) -> bool {
         self.hidden.unwrap_or(true)
+    }
+
+    /// Whether the app preview icon draws its mouse-following gloss.
+    pub fn app_list_glossy_effect(&self) -> bool {
+        self.item_settings.app_list.glossy_effect.unwrap_or(true)
     }
 }
 

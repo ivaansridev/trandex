@@ -7,6 +7,11 @@ items:
   - Math
   - Index
 
+item-settings:
+  app-list:
+    # Mouse-following gloss on the app preview icon.
+    glossy-effect: true
+
 shortcuts:
    ">": "commands"
    "=": "math"
@@ -39,7 +44,6 @@ ignore:
   - .m2
   - .ccache
   - .local
-  - .config
   - .mozilla
   - .thunderbird
   - .var

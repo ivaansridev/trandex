@@ -66,6 +66,9 @@ items:                                # order matters
   - Commands
   - Math
   - Index
+item-settings:
+  app-list:
+    glossy-effect: true               # mouse-following gloss on the app preview icon
 ignore:                               # directory names skipped by file search
   - node_modules
   - target
@@ -74,6 +77,7 @@ ignore:                               # directory names skipped by file search
 ```
 
 - `items` accepts only `AppList` (desktop apps), `Commands` (executables on your `$PATH`), `Math` (calculator), and `Index` (files). Sections appear in the order you list them, and unlisted sections are not loaded.
+- `item-settings.app-list.glossy-effect` toggles the app preview's mouse-following gloss. It defaults to `true`.
 - `ignore` matches directory names. Add any folder you don't want searched.
 
 Styles are CSS. The classes you can target are listed in `src/themes/styling.md`, and `src/themes/basic.css` is a good starting point.
