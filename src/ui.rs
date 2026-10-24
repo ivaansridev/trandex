@@ -576,6 +576,10 @@ struct ResultRow {
     path: gtk::Label,
     /// Shortcut pill ("Alt + 1" ... "Alt + 0") shown on the first ten rows.
     shortcut: gtk::Label,
+    /// The item currently bound, so new content is detected for the entrance animation.
+    bound: Cell<Option<ItemRef>>,
+    /// Bumped to cancel an in-flight entrance animation.
+    animation: Rc<Cell<u64>>,
 }
 
 impl ResultRow {
@@ -624,6 +628,8 @@ impl ResultRow {
             name,
             path,
             shortcut,
+            bound: Cell::new(None),
+            animation: Rc::new(Cell::new(0)),
         }
     }
 
@@ -654,6 +660,91 @@ impl ResultRow {
             self.shortcut.set_visible(true);
         }
     }
+
+    /// Mark `item_ref` as bound, playing the entrance animation when the row is
+    /// settled and newly shown (or `force`d for a fresh result set).
+    fn enter(&self, item_ref: ItemRef, index: usize, force: bool, stagger_ms: u64) {
+        if self.bound.get() == Some(item_ref) {
+            return;
+        }
+        let was_hidden = self.bound.get().is_none();
+        self.bound.set(Some(item_ref));
+        if (force || was_hidden) && self.row.opacity() >= 0.999 {
+            animate_row_in(&self.row, &self.animation, index, stagger_ms);
+        }
+    }
+
+    /// Hide this row and stop any in-flight entrance animation.
+    fn hide(&self) {
+        self.animation.set(self.animation.get().wrapping_add(1));
+        self.bound.set(None);
+        self.row.set_opacity(1.0);
+        self.row.set_visible(false);
+    }
+}
+
+/// How long a single result row takes to fade in, in seconds.
+const ROW_ANIM_SECONDS: f64 = 0.16;
+/// Delay added per row so results cascade in, chosen from the result count.
+///
+/// Small lists animate slower (50 ms per row with 2 results) while larger ones
+/// tighten to 20 ms; the value never goes below 20 ms.
+const ROW_ANIM_STAGGER_MAX_MS: u64 = 50;
+const ROW_ANIM_STAGGER_MIN_MS: u64 = 20;
+/// Above this many rows the stagger is not increased further (window height caps it).
+const ROW_ANIM_STAGGER_CAP: usize = 10;
+
+/// Per-row stagger for a result list of `count` rows, interpolated from 50 ms
+/// at 2 results down to 20 ms at 10 or more.
+fn row_stagger_ms(count: usize) -> u64 {
+    if count <= 2 {
+        return ROW_ANIM_STAGGER_MAX_MS;
+    }
+    if count >= ROW_ANIM_STAGGER_CAP {
+        return ROW_ANIM_STAGGER_MIN_MS;
+    }
+    let t = (count - 2) as f64 / (ROW_ANIM_STAGGER_CAP - 2) as f64;
+    let span = (ROW_ANIM_STAGGER_MAX_MS - ROW_ANIM_STAGGER_MIN_MS) as f64;
+    (ROW_ANIM_STAGGER_MAX_MS as f64 - span * t).round() as u64
+}
+
+/// Fade `row` in with an ease-out curve, after a small per-index stagger.
+///
+/// The tick callback stops as soon as the row is fully visible, and a fresh
+/// animation (or [`ResultRow::hide`]) bumps the shared generation so a stale
+/// callback cannot keep running.
+fn animate_row_in(
+    row: &gtk::ListBoxRow,
+    generation: &Rc<Cell<u64>>,
+    index: usize,
+    stagger_ms: u64,
+) {
+    let frame = generation.get().wrapping_add(1);
+    generation.set(frame);
+    let delay = Duration::from_millis(stagger_ms * index.min(ROW_ANIM_STAGGER_CAP) as u64);
+    row.set_opacity(0.0);
+
+    let generation = Rc::clone(generation);
+    let started = Instant::now();
+    row.add_tick_callback(move |widget, _clock| {
+        if generation.get() != frame {
+            return glib::ControlFlow::Break;
+        }
+        let elapsed = started.elapsed();
+        if elapsed < delay {
+            return glib::ControlFlow::Continue;
+        }
+        let progress =
+            ((elapsed - delay).as_secs_f64() / ROW_ANIM_SECONDS).clamp(0.0, 1.0);
+        let eased = 1.0 - (1.0 - progress).powi(3);
+        widget.set_opacity(eased);
+        if progress >= 1.0 {
+            widget.set_opacity(1.0);
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
+        }
+    });
 }
 
 
@@ -1781,11 +1872,17 @@ fn refresh_with_shown(
     }
 
     {
+        // A fresh result set (previous list was empty) cascades in even where
+        // rows are reused; otherwise only newly filled rows animate, so rapid
+        // typing does not re-fade the whole list.
+        let fresh_start = state.borrow().shown.is_empty();
+        let stagger_ms = row_stagger_ms(shown.len());
         let state = state.borrow();
         for (row_index, (slot, &item_ref)) in pool.iter().zip(&shown).enumerate() {
             match item_ref {
                 ItemRef::Math => {
                     if let Some(answer) = &state.math_answer {
+                        slot.enter(item_ref, row_index, fresh_start, stagger_ms);
                         slot.bind_math(
                             answer,
                             state.math_expression.as_deref().unwrap_or(""),
@@ -1796,6 +1893,7 @@ fn refresh_with_shown(
                 }
                 _ => {
                     if let Some(item) = resolve(&state, item_ref) {
+                        slot.enter(item_ref, row_index, fresh_start, stagger_ms);
                         slot.bind(&item, row_index);
                         slot.row.set_visible(true);
                     }
@@ -1805,7 +1903,7 @@ fn refresh_with_shown(
     }
 
     for slot in pool.iter().skip(shown.len()) {
-        slot.row.set_visible(false);
+        slot.hide();
     }
 
     let selected = previous
