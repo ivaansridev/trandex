@@ -1589,7 +1589,7 @@ fn refresh_with_shown(
 
     let query_nonempty = !state.borrow().query.trim().is_empty();
     let has_results = !shown.is_empty();
-    set_preview_visibility(view, query_nonempty);
+    set_preview_visibility(view, query_nonempty && has_results);
     view.scroller.set_opacity(if has_results { 1.0 } else { 0.0 });
 
     // Nothing changed, so avoid touching any widgets.
@@ -1805,7 +1805,15 @@ fn update_preview(
 
     let item = match item_opt {
         Some(i) => i,
-        None => return,
+        None => {
+            // Clear stale content so a previous file cannot linger when the
+            // current result set is empty or its selection cannot be resolved.
+            view.preview_label.set_label("");
+            view.preview_picture.set_file(None::<&gio::File>);
+            view.preview_label.set_visible(false);
+            view.preview_picture.set_visible(false);
+            return;
+        }
     };
 
     match item {
