@@ -312,6 +312,50 @@ enum ItemRef {
     File(usize),
 }
 
+/// Which sources the current query is allowed to return.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SearchMode {
+    /// No prefix: search apps, commands, math, and files.
+    All,
+    /// `>` prefix: commands only.
+    Commands,
+    /// `=` prefix: calculator only.
+    Math,
+    /// `*` prefix: files only.
+    Index,
+}
+
+/// A query split into its shortcut mode and the text to search for.
+struct QueryPlan<'a> {
+    mode: SearchMode,
+    term: &'a str,
+}
+
+/// Match a leading shortcut prefix and return the mode plus the remaining term.
+///
+/// Shortcuts are ordered longest-first, so `"> "` is preferred over `">"`.
+fn plan_query<'a>(query: &'a str, shortcuts: &[(String, String)]) -> QueryPlan<'a> {
+    for (prefix, section) in shortcuts {
+        let Some(rest) = query.strip_prefix(prefix.as_str()) else {
+            continue;
+        };
+        let mode = match section.as_str() {
+            "commands" => SearchMode::Commands,
+            "math" => SearchMode::Math,
+            "index" => SearchMode::Index,
+            _ => continue,
+        };
+        return QueryPlan {
+            mode,
+            term: rest.trim_start(),
+        };
+    }
+    QueryPlan {
+        mode: SearchMode::All,
+        term: query,
+    }
+}
+
 /// A message produced by one of the indexing worker threads.
 enum IndexMessage {
     /// The parsed desktop applications, as items.
@@ -362,6 +406,8 @@ struct State {
     math_answer: Option<String>,
     math_expression: Option<String>,
     providers: Vec<Provider>,
+    /// Prefix -> section shortcuts, longest prefix first.
+    shortcuts: Vec<(String, String)>,
 }
 
 impl Default for State {
@@ -380,6 +426,7 @@ impl Default for State {
                 Provider::Math,
                 Provider::Index,
             ],
+            shortcuts: Vec::new(),
         }
     }
 }
@@ -817,6 +864,7 @@ fn setup_full(
         let presented = Instant::now();
         let state = Rc::new(RefCell::new(State::default()));
         state.borrow_mut().providers = config.providers();
+        state.borrow_mut().shortcuts = config.shortcuts();
         let pool: Rc<RefCell<Vec<ResultRow>>> = Rc::new(RefCell::new(Vec::new()));
         let generation = Rc::new(Cell::new(0u64));
         let preview_cache = Rc::new(RefCell::new(PreviewCache::new()));
@@ -1104,32 +1152,43 @@ fn setup_full(
                 let current = generation.get().wrapping_add(1);
                 generation.set(current);
                 file_cancel.store(current, Ordering::Relaxed);
+
+                let (mode, term) = {
+                    let state_ref = state.borrow();
+                    let plan = plan_query(&text, &state_ref.shortcuts);
+                    (plan.mode, plan.term.to_string())
+                };
+                let searching_files = !term.trim().is_empty()
+                    && matches!(mode, SearchMode::All | SearchMode::Index)
+                    && state.borrow().providers.contains(&Provider::Index);
+
                 if text.trim().is_empty() {
                     set_preview_visibility(&view, false);
-                    spinner.stop();
-                    spinner.set_visible(false);
-                    debug_log("file spinner stopped: empty query");
-                } else {
+                }
+                if searching_files {
                     spinner.set_visible(true);
                     spinner.start();
                     debug_log(&format!("file spinner started generation={current}"));
+                } else {
+                    spinner.stop();
+                    spinner.set_visible(false);
+                    debug_log("file spinner stopped: no file search for query");
                 }
                 state.borrow_mut().file_results.clear();
                 state.borrow_mut().query = text.clone();
                 let index_revision = state.borrow().index_revision;
                 let _ = filter_tx.send_blocking(FilterRequest {
                     generation: current,
-                    query: text.clone(),
+                    query: term.clone(),
                     index_revision,
                 });
-                if !text.trim().is_empty()
-                    && state.borrow().providers.contains(&Provider::Index) && !text.trim().is_empty() {
-                        let _ = file_tx.send_blocking(FileQueryRequest {
-                            generation: current,
-                            query: text,
-                            sent_at: Instant::now(),
-                        });
-                    }
+                if searching_files {
+                    let _ = file_tx.send_blocking(FileQueryRequest {
+                        generation: current,
+                        query: term,
+                        sent_at: Instant::now(),
+                    });
+                }
             });
         }
         {
@@ -1832,19 +1891,23 @@ fn refresh_with_shown(
     shown: Vec<ItemRef>,
 ) {
     let started = Instant::now();
-    let expression = state.borrow().query.trim().to_string();
-    let calculator = {
-        let query = state.borrow().query.clone();
-        calculator_answer(&query)
+    let (mode, term) = {
+        let state_ref = state.borrow();
+        let plan = plan_query(&state_ref.query, &state_ref.shortcuts);
+        (plan.mode, plan.term.to_string())
+    };
+    let calculator = match mode {
+        SearchMode::All | SearchMode::Math => calculator_answer(&term),
+        SearchMode::Commands | SearchMode::Index => None,
     };
     {
         let mut state_ref = state.borrow_mut();
         state_ref.math_answer = calculator.clone();
-        state_ref.math_expression = calculator.as_ref().map(|_| expression.clone());
+        state_ref.math_expression = calculator.as_ref().map(|_| term.trim().to_string());
     }
     let shown = {
         let state_ref = state.borrow();
-        compose_shown(&state_ref, shown)
+        compose_shown(&state_ref, shown, mode)
     };
 
     let query_nonempty = !state.borrow().query.trim().is_empty();
@@ -1933,24 +1996,32 @@ fn refresh_with_shown(
     log_refresh(state, started);
 }
 
-fn compose_shown(state: &State, app_results: Vec<ItemRef>) -> Vec<ItemRef> {
+fn compose_shown(state: &State, app_results: Vec<ItemRef>, mode: SearchMode) -> Vec<ItemRef> {
     let mut result = Vec::new();
     for provider in &state.providers {
-        match provider {
-            Provider::AppList => result.extend(
+        match (mode, provider) {
+            (SearchMode::All, Provider::AppList) => result.extend(
                 app_results
                     .iter()
                     .copied()
                     .filter(|item| matches!(item, ItemRef::App(_))),
             ),
-            Provider::Commands => result.extend(
-                app_results
-                    .iter()
-                    .copied()
-                    .filter(|item| matches!(item, ItemRef::Command(_))),
-            ),
-            Provider::Math if state.math_answer.is_some() => result.push(ItemRef::Math),
-            Provider::Index => result.extend((0..state.file_results.len()).map(ItemRef::File)),
+            (SearchMode::All, Provider::Commands) | (SearchMode::Commands, Provider::Commands) => {
+                result.extend(
+                    app_results
+                        .iter()
+                        .copied()
+                        .filter(|item| matches!(item, ItemRef::Command(_))),
+                )
+            }
+            (SearchMode::All, Provider::Math) | (SearchMode::Math, Provider::Math)
+                if state.math_answer.is_some() =>
+            {
+                result.push(ItemRef::Math)
+            }
+            (SearchMode::All, Provider::Index) | (SearchMode::Index, Provider::Index) => {
+                result.extend((0..state.file_results.len()).map(ItemRef::File))
+            }
             _ => {}
         }
         if result.len() >= MAX_RESULTS {

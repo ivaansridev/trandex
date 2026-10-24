@@ -69,6 +69,10 @@ items:                                # order matters
 item-settings:
   app-list:
     glossy-effect: true               # mouse-following gloss on the app preview icon
+shortcuts:                            # prefix -> section
+  ">": commands                       # commands only
+  "=": math                           # calculator only
+  "*": index                          # files only
 ignore:                               # directory names skipped by file search
   - node_modules
   - target
@@ -78,6 +82,7 @@ ignore:                               # directory names skipped by file search
 
 - `items` accepts only `AppList` (desktop apps), `Commands` (executables on your `$PATH`), `Math` (calculator), and `Index` (files). Sections appear in the order you list them, and unlisted sections are not loaded.
 - `item-settings.app-list.glossy-effect` toggles the app preview's mouse-following gloss. It defaults to `true`.
+- `shortcuts` maps a typed prefix to a single section. Typing `> git` searches commands only, `= 1+1` runs the calculator, and `* report` searches files only. The `>`/`=`/`*` forms work with or without a following space.
 - `ignore` matches directory names. Add any folder you don't want searched.
 
 Styles are CSS. The classes you can target are listed in `src/themes/styling.md`, and `src/themes/basic.css` is a good starting point.

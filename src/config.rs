@@ -3,6 +3,7 @@
 //! The schema mirrors `src/config.yaml`. `styles`, `position`, and `items` are
 //! parsed and validated before the UI is constructed.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -13,6 +14,15 @@ const DEFAULT_PLACEHOLDER: &str = "Search files…";
 
 /// Directories ignored while indexing when the configuration does not say otherwise.
 const DEFAULT_IGNORE: &[&str] = &["node_modules", ".git"];
+
+/// Prefix shortcuts used when the configuration does not define any.
+const DEFAULT_SHORTCUTS: &[(&str, &str)] = &[
+    ("> ", "commands"),
+    (">", "commands"),
+    ("= ", "math"),
+    ("=", "math"),
+    ("*", "index"),
+];
 
 /// The Trandex configuration file.
 #[derive(Debug, Default, Deserialize)]
@@ -35,6 +45,9 @@ pub struct Config {
     /// Per-provider appearance options.
     #[serde(default, rename = "item-settings", alias = "itemsettings")]
     pub item_settings: ItemSettings,
+    /// Prefix -> section shortcuts (for example `">": commands`).
+    #[serde(default)]
+    pub shortcuts: HashMap<String, String>,
     /// Directory names excluded from indexing.
     #[serde(default)]
     pub ignore: Vec<String>,
@@ -221,6 +234,23 @@ impl Config {
     /// Whether the app preview icon draws its mouse-following gloss.
     pub fn app_list_glossy_effect(&self) -> bool {
         self.item_settings.app_list.glossy_effect.unwrap_or(true)
+    }
+
+    /// Prefix shortcuts, longest prefix first so `"> "` wins over `">"`.
+    pub fn shortcuts(&self) -> Vec<(String, String)> {
+        let mut entries: Vec<(String, String)> = if self.shortcuts.is_empty() {
+            DEFAULT_SHORTCUTS
+                .iter()
+                .map(|(prefix, section)| ((*prefix).to_string(), (*section).to_string()))
+                .collect()
+        } else {
+            self.shortcuts
+                .iter()
+                .map(|(prefix, section)| (prefix.clone(), section.clone()))
+                .collect()
+        };
+        entries.sort_by_key(|entry| std::cmp::Reverse(entry.0.len()));
+        entries
     }
 }
 
