@@ -1,11 +1,16 @@
-# Set your own path (Absolute without '~')
 position: center
 placeholder: "Start typing..."
 preview: left
 items:
   - AppList
+  - Commands
   - Math
   - Index
+
+shortcuts:
+   ">": "commands"
+   "=": "math"
+   "*": "index"
 
 ignore:
   # Build output and dependencies

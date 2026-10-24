@@ -374,7 +374,12 @@ impl Default for State {
             math_answer: None,
             math_expression: None,
             index_revision: 0,
-            providers: vec![Provider::AppList, Provider::Math, Provider::Index],
+            providers: vec![
+                Provider::AppList,
+                Provider::Commands,
+                Provider::Math,
+                Provider::Index,
+            ],
         }
     }
 }
@@ -562,7 +567,8 @@ fn setup_full(
         let preview_cache = Rc::new(RefCell::new(PreviewCache::new()));
         let (filter_tx, filter_rx) = start_filter_worker(
             state.borrow().apps.clone(),
-            state.borrow().providers.contains(&Provider::AppList),
+            state.borrow().providers.contains(&Provider::AppList)
+                || state.borrow().providers.contains(&Provider::Commands),
         );
         let file_cancel = Arc::new(AtomicU64::new(0));
         let (file_tx, file_rx) = start_file_query_worker(config.clone(), file_cancel.clone());
@@ -1388,11 +1394,12 @@ fn start_indexing(
 ) {
     let (sender, receiver) = async_channel::unbounded::<IndexMessage>();
     let apps_enabled = config.provider_enabled(Provider::AppList);
+    let commands_enabled = config.provider_enabled(Provider::Commands);
 
     // --- Apps --------------------------------------------------------------
     let apps_sender = sender.clone();
     std::thread::spawn(move || {
-        if !apps_enabled {
+        if !apps_enabled && !commands_enabled {
             return;
         }
         // Timed under TRANDEX_DEBUG for comparison against the .desktop parse.
@@ -1408,14 +1415,20 @@ fn start_indexing(
         }
 
         let started = Instant::now();
-        let mut apps: Vec<Item> = indexer::desktop_apps()
-            .into_iter()
-            .filter_map(Item::app)
-            .collect();
+        let mut apps: Vec<Item> = if apps_enabled {
+            indexer::desktop_apps()
+                .into_iter()
+                .filter_map(Item::app)
+                .collect()
+        } else {
+            Vec::new()
+        };
         let command_start = apps.len();
-        apps.extend(indexer::path_commands().into_iter().map(|path| Item {
-            source: Source::Command(path),
-        }));
+        if commands_enabled {
+            apps.extend(indexer::path_commands().into_iter().map(|path| Item {
+                source: Source::Command(path),
+            }));
+        }
         debug_log(&format!(
             "desktop app parse complete: {} apps in {:?}",
             command_start,
@@ -1657,7 +1670,18 @@ fn compose_shown(state: &State, app_results: Vec<ItemRef>) -> Vec<ItemRef> {
     let mut result = Vec::new();
     for provider in &state.providers {
         match provider {
-            Provider::AppList => result.extend(app_results.iter().copied()),
+            Provider::AppList => result.extend(
+                app_results
+                    .iter()
+                    .copied()
+                    .filter(|item| matches!(item, ItemRef::App(_))),
+            ),
+            Provider::Commands => result.extend(
+                app_results
+                    .iter()
+                    .copied()
+                    .filter(|item| matches!(item, ItemRef::Command(_))),
+            ),
             Provider::Math if state.math_answer.is_some() => result.push(ItemRef::Math),
             Provider::Index => result.extend((0..state.file_results.len()).map(ItemRef::File)),
             _ => {}

@@ -63,6 +63,7 @@ placeholder: "Start typing..."
 preview: right                        # left, right, or false
 items:                                # order matters
   - AppList
+  - Commands
   - Math
   - Index
 ignore:                               # directory names skipped by file search
@@ -72,7 +73,7 @@ ignore:                               # directory names skipped by file search
   - .cache
 ```
 
-- `items` accepts only `AppList` (desktop apps), `Math` (calculator), and `Index` (files). Sections appear in the order you list them, and unlisted sections are not loaded.
+- `items` accepts only `AppList` (desktop apps), `Commands` (executables on your `$PATH`), `Math` (calculator), and `Index` (files). Sections appear in the order you list them, and unlisted sections are not loaded.
 - `ignore` matches directory names. Add any folder you don't want searched.
 
 Styles are CSS. The classes you can target are listed in `src/themes/styling.md`, and `src/themes/basic.css` is a good starting point.

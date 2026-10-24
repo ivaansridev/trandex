@@ -43,6 +43,7 @@ pub struct Config {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     AppList,
+    Commands,
     Math,
     Index,
 }
@@ -112,7 +113,7 @@ impl Config {
     /// Reject `preview` values other than `left`, `right`, or `false`.
     fn validate(&self) -> Result<(), ValidationError> {
         for item in &self.items {
-            if !matches!(item.as_str(), "AppList" | "Math" | "Index") {
+            if !matches!(item.as_str(), "AppList" | "Commands" | "Math" | "Index") {
                 return Err(ValidationError::Items(item.clone()));
             }
         }
@@ -143,10 +144,11 @@ impl Config {
 
     pub fn providers(&self) -> Vec<Provider> {
         if self.items.is_empty() {
-            vec![Provider::AppList, Provider::Math, Provider::Index]
+            vec![Provider::AppList, Provider::Commands, Provider::Math, Provider::Index]
         } else {
             self.items.iter().filter_map(|item| match item.as_str() {
                 "AppList" => Some(Provider::AppList),
+                "Commands" => Some(Provider::Commands),
                 "Math" => Some(Provider::Math),
                 "Index" => Some(Provider::Index),
                 _ => None,
@@ -243,7 +245,7 @@ impl fmt::Display for ConfigError {
             ),
             ConfigError::InvalidItems { path, value } => write!(
                 f,
-                "invalid config file {}: items entry {value:?}; valid names are AppList, Math, Index",
+                "invalid config file {}: items entry {value:?}; valid names are AppList, Commands, Math, Index",
                 path.display()
             ),
         }
